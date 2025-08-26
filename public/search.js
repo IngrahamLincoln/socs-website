@@ -293,76 +293,131 @@ function initializeSearch() {
     document.getElementById('clear-filters-btn')?.addEventListener('click', clearFilters);
 }
 
-// Authentication handling
-async function checkAuthStatus() {
-    try {
-        const response = await fetch('/api/auth/check', {
-            credentials: 'include'
-        });
-        return response.ok;
-    } catch (error) {
-        console.error('Error checking auth status:', error);
-        return false;
-    }
+// --- NEW CLERK.JS AUTHENTICATION LOGIC ---
+
+let clerk = null; // This will hold the global Clerk instance
+
+/**
+ * This function is called once the Clerk.js script is fully loaded.
+ * It initializes the Clerk instance and sets up listeners to keep the UI in sync.
+ */
+function startClerk() {
+  clerk = window.Clerk;
+  
+  // Add a listener to automatically update the UI whenever the user signs in or out
+  clerk.addListener(({ user }) => {
+    updateAuthUI(user);
+    checkRedirect(); // Check for a pending lesson redirect after auth state changes
+  });
+  
+  // Initial UI setup and redirect check
+  updateAuthUI(clerk.user);
+  checkRedirect();
 }
 
-function handleLessonClick(lessonUrl) {
-    // Check if user is authenticated
-    checkAuthStatus().then(isAuthenticated => {
-        if (isAuthenticated) {
-            // User is signed in, open the lesson
-            window.open(lessonUrl, '_blank', 'noopener,noreferrer');
-        } else {
-            // User is not signed in, redirect to sign-in page
-            // Store the intended URL to redirect after sign-in
-            localStorage.setItem('redirectAfterSignIn', lessonUrl);
-            window.location.href = '/sign-in';
-        }
-    });
-}
-
-function initializeAuthButtons() {
+/**
+ * Dynamically updates the header buttons based on the user's authentication state.
+ * @param {object | null} user - The Clerk user object, or null if signed out.
+ */
+function updateAuthUI(user) {
     const authContainer = document.getElementById('auth-container');
-    if (authContainer) {
-        // Check if user is authenticated
-        checkAuthStatus().then(isAuthenticated => {
-            if (isAuthenticated) {
-                // Show sign out button
-                authContainer.innerHTML = `
-                    <button class="sign-in-btn" onclick="handleSignOut()">
-                        Sign Out
-                    </button>
-                `;
-            } else {
-                // Show single sign in button
-                authContainer.innerHTML = `
-                    <button class="sign-up-btn" onclick="handleSignIn()">
-                        Sign In
-                    </button>
-                `;
-            }
+    if (!authContainer) return;
+
+    if (user) {
+        // User is signed in: show a "Sign Out" button
+        authContainer.innerHTML = `
+            <button class="sign-in-btn" id="sign-out-btn">Sign Out</button>
+        `;
+        document.getElementById('sign-out-btn')?.addEventListener('click', () => {
+            clerk?.signOut({ redirectUrl: '/' });
+        });
+    } else {
+        // User is signed out: show a "Sign In / Sign Up" button
+        authContainer.innerHTML = `
+            <button class="sign-up-btn" id="sign-in-btn">Sign In / Sign Up</button>
+        `;
+        document.getElementById('sign-in-btn')?.addEventListener('click', () => {
+            clerk?.openSignIn();
         });
     }
 }
 
-function handleSignIn() {
-    window.location.href = '/sign-in';
+/**
+ * Handles clicking on a "View Lesson" button.
+ * If the user is signed in, it opens the lesson. If not, it opens the sign-in modal
+ * and saves the lesson URL to be opened after a successful login.
+ * @param {string} lessonUrl - The URL of the lesson to view.
+ */
+function handleLessonClick(lessonUrl) {
+  if (clerk && clerk.user) {
+    // User is signed in, open the lesson directly
+    window.open(lessonUrl, '_blank', 'noopener,noreferrer');
+  } else {
+    // User is not signed in. Store the target URL and open the sign-in modal.
+    localStorage.setItem('redirectAfterSignIn', lessonUrl);
+    clerk?.openSignIn();
+  }
 }
 
-function handleSignOut() {
-    // Use Clerk's sign out endpoint
-    window.location.href = '/sign-in';  // Clerk will handle sign out through middleware
+/**
+ * Checks if there is a pending lesson redirect in localStorage after a user signs in.
+ * If found, it opens the lesson and clears the stored URL.
+ */
+function checkRedirect() {
+    const redirectUrl = localStorage.getItem('redirectAfterSignIn');
+    if (redirectUrl && clerk && clerk.user) {
+        localStorage.removeItem('redirectAfterSignIn');
+        window.open(redirectUrl, '_blank', 'noopener,noreferrer');
+    }
 }
 
 // --- SCRIPT EXECUTION ---
 
-// Wait for the DOM to be fully loaded before initializing.
+// Wait for DOM to be ready
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
         initializeSearch();
-        initializeAuthButtons();
+        initializeClerk();
     });
 } else {
     initializeSearch();
-    initializeAuthButtons();
+    initializeClerk();
+}
+
+function initializeClerk() {
+    // Try to initialize Clerk if it's available
+    if (window.Clerk) {
+        window.Clerk.load().then(startClerk).catch((error) => {
+            console.error('Failed to load Clerk:', error);
+            // Fallback to basic auth buttons
+            showFallbackAuth();
+        });
+    } else {
+        // Wait for Clerk to be available
+        let attempts = 0;
+        const checkClerk = setInterval(() => {
+            attempts++;
+            if (window.Clerk) {
+                clearInterval(checkClerk);
+                window.Clerk.load().then(startClerk).catch((error) => {
+                    console.error('Failed to load Clerk:', error);
+                    showFallbackAuth();
+                });
+            } else if (attempts > 20) {
+                // After 10 seconds, show fallback
+                clearInterval(checkClerk);
+                console.warn('Clerk not available, using fallback');
+                showFallbackAuth();
+            }
+        }, 500);
+    }
+}
+
+function showFallbackAuth() {
+    const authContainer = document.getElementById('auth-container');
+    if (!authContainer) return;
+    
+    authContainer.innerHTML = `
+        <button class="sign-up-btn" onclick="window.location.href='/sign-in'">Sign In</button>
+    `;
 }

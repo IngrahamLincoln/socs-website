@@ -10,6 +10,18 @@ export async function GET() {
   <title>SOCS4AI Lesson Search</title>
   <link rel="stylesheet" href="/search/style.css">
   <link rel="stylesheet" href="/search/custom-overrides.css">
+  <script 
+    async
+    crossorigin="anonymous" 
+    data-clerk-publishable-key="${process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}"
+    onload="window.clerkAsyncInit()" 
+    src="https://excited-bedbug-92.clerk.accounts.dev/npm/@clerk/clerk-js@latest/dist/clerk.browser.js">
+  </script>
+  <script>
+    window.clerkAsyncInit = async () => {
+      await window.Clerk.load();
+    };
+  </script>
   <style>
     .auth-buttons {
       display: flex;
