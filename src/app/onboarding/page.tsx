@@ -21,7 +21,7 @@ export default function OnboardingPage() {
     try {
       // Update user metadata in Clerk
       await user.update({
-        publicMetadata: {
+        unsafeMetadata: {
           isTeacher,
           gradeLevel: isTeacher ? gradeLevel : null,
           school: isTeacher ? school : null,
@@ -51,7 +51,7 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 to-primary-100 py-12 px-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 py-12 px-4">
       <div className="max-w-md mx-auto bg-white rounded-xl shadow-lg p-8">
         <h1 className="text-2xl font-bold text-gray-900 mb-2">Welcome to SOCS4AI!</h1>
         <p className="text-gray-600 mb-6">
@@ -105,7 +105,7 @@ export default function OnboardingPage() {
                   id="grade"
                   value={gradeLevel}
                   onChange={(e) => setGradeLevel(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
                 >
                   <option value="">Select grade level</option>
@@ -132,7 +132,7 @@ export default function OnboardingPage() {
                   value={school}
                   onChange={(e) => setSchool(e.target.value)}
                   placeholder="Enter your school name"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
             </>
@@ -141,7 +141,7 @@ export default function OnboardingPage() {
           <button
             type="submit"
             disabled={isSubmitting || isTeacher === null}
-            className="w-full py-3 px-4 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            className="w-full py-3 px-4 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
           >
             {isSubmitting ? 'Saving...' : 'Complete Profile'}
           </button>
