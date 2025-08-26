@@ -1,102 +1,106 @@
-// Simple, elegant search implementation
-let lessons = []
-let searchTimeout = null
+let allLessons = [];
+let searchTimeoutId = null;
 
-// Load lessons on page load
+const searchState = {
+    query: '',
+    filters: {
+        grade: [],
+        subject: [],
+        ctConcept: []
+    },
+    sortBy: 'lessonTitle',
+    sortOrder: 'asc'
+};
+
 async function loadLessons() {
-  try {
-    // Show loading state
     const hitsContainer = document.getElementById('hits')
     if (hitsContainer) {
-      hitsContainer.innerHTML = '<li class="loading-message">Loading lessons...</li>'
+        hitsContainer.innerHTML = '<li class="loading-message">Loading lessons...</li>';
     }
-    
-    const response = await fetch('/api/lessons')
-    lessons = await response.json()
-    
-    // Filter lessons immediately - only show ready to publish with folder links
-    const readyLessons = lessons.filter(lesson => {
-      return lesson.readyToPublish && lesson.linkToFolder && lesson.linkToFolder.trim() !== ''
-    })
-    
-    renderLessons(readyLessons)
-    updateFacets()
-  } catch (error) {
-    console.error('Failed to load lessons:', error)
-    const hitsContainer = document.getElementById('hits')
-    if (hitsContainer) {
-      hitsContainer.innerHTML = '<li class="error-message">Error loading lessons</li>'
+
+    try {
+        const response = await fetch('/api/lessons');
+        const lessonsData = await response.json();
+
+        // Pre-filter lessons to only include those that are ready to publish and have a valid link.
+        allLessons = lessonsData.filter(lesson =>
+            lesson.readyToPublish && lesson.linkToFolder && lesson.linkToFolder.trim() !== ''
+        );
+
+        searchAndRender(); // Perform initial render
+    } catch (error) {
+        console.error('Failed to load lessons:', error);
+        if (hitsContainer) {
+            hitsContainer.innerHTML = '<li class="error-message">Error loading lessons. Please try refreshing the page.</li>';
+        }
     }
-  }
 }
 
-// Simple debounce function
 function debounce(func, delay) {
-  return function(...args) {
-    clearTimeout(searchTimeout)
-    searchTimeout = setTimeout(() => func.apply(this, args), delay)
-  }
+    return function(...args) {
+        clearTimeout(searchTimeoutId);
+        searchTimeoutId = setTimeout(() => func.apply(this, args), delay);
+    };
 }
 
-// Search and filter
-function searchLessons() {
-  const query = document.getElementById('search-input')?.value?.toLowerCase() || ''
-  
-  // Get selected filters
-  const selectedGrades = Array.from(document.querySelectorAll('#grade-facet input:checked')).map(cb => cb.value)
-  const selectedSubjects = Array.from(document.querySelectorAll('#subject-facet input:checked')).map(cb => cb.value)
-  const selectedConcepts = Array.from(document.querySelectorAll('#concept-facet input:checked')).map(cb => cb.value)
-  const sortBy = document.getElementById('sort-select')?.value || 'relevance'
-  
-  // Filter lessons - only show ready to publish lessons with a link to folder
-  let filtered = lessons.filter(lesson => {
-    // Must be ready to publish
-    if (!lesson.readyToPublish) {
-      console.log('Filtering out lesson (not ready):', lesson.lessonTitle, 'readyToPublish:', lesson.readyToPublish)
-      return false
+function searchAndRender() {
+    updateStateFromDOM();
+
+    let filteredLessons = [...allLessons];
+
+    // 1. Apply Search Query
+    if (searchState.query) {
+        const query = searchState.query.toLowerCase();
+        filteredLessons = filteredLessons.filter(lesson =>
+            ['lessonTitle', 'originalAuthor', 'subject', 'ctConcept', 'grade'].some(field =>
+                lesson[field]?.toLowerCase().includes(query)
+            )
+        );
     }
-    
-    // Must have a link to folder
-    if (!lesson.linkToFolder || lesson.linkToFolder.trim() === '') {
-      console.log('Filtering out lesson (no link):', lesson.lessonTitle, 'linkToFolder:', lesson.linkToFolder)
-      return false
-    }
-    
-    // Search query
-    const matchesSearch = !query || 
-      lesson.lessonTitle.toLowerCase().includes(query) ||
-      lesson.originalAuthor.toLowerCase().includes(query) ||
-      lesson.subject.toLowerCase().includes(query) ||
-      lesson.ctConcept.toLowerCase().includes(query) ||
-      lesson.grade.toLowerCase().includes(query)
-    
-    // Filters
-    const matchesGrade = selectedGrades.length === 0 || 
-      selectedGrades.some(g => lesson.grade.includes(g))
-    
-    const matchesSubject = selectedSubjects.length === 0 || 
-      selectedSubjects.some(s => lesson.subject.includes(s))
-    
-    const matchesConcept = selectedConcepts.length === 0 || 
-      selectedConcepts.some(c => lesson.ctConcept.includes(c))
-    
-    return matchesSearch && matchesGrade && matchesSubject && matchesConcept
-  })
+
+    // 2. Apply Filters
+    Object.entries(searchState.filters).forEach(([facet, selectedValues]) => {
+        if (selectedValues.length > 0) {
+            const facetField = facet === 'ctConcept' ? 'ctConcept' : facet; // Map facet names to field names
+            filteredLessons = filteredLessons.filter(lesson =>
+                selectedValues.some(value => lesson[facetField]?.includes(value))
+            );
+        }
+    });
   
-  // Sort
-  if (sortBy === 'title') {
-    filtered.sort((a, b) => a.lessonTitle.localeCompare(b.lessonTitle))
-  } else if (sortBy === 'grade') {
-    filtered.sort((a, b) => a.grade.localeCompare(b.grade))
-  } else if (sortBy === 'lesson-number') {
-    filtered.sort((a, b) => parseInt(a.lessonNumber || '0') - parseInt(b.lessonNumber || '0'))
-  }
-  
-  renderLessons(filtered)
-  updateResultsCount(filtered.length)
+    // 3. Apply Sorting
+    const sortKey = searchState.sortBy;
+    const sortOrder = searchState.sortOrder;
+    
+    filteredLessons.sort((a, b) => {
+        let comparison;
+        
+        if (sortKey === 'grade') {
+            // Custom grade sorting: K comes before numbers
+            const gradeOrder = { 'K': 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6 };
+            
+            // Handle complex grades like "1, 2" or "4, 5" by taking the first grade
+            const getFirstGrade = (grade) => {
+                const firstGrade = grade.split(',')[0].trim();
+                return gradeOrder[firstGrade] !== undefined ? gradeOrder[firstGrade] : 999;
+            };
+            
+            const gradeA = getFirstGrade(a.grade || '');
+            const gradeB = getFirstGrade(b.grade || '');
+            comparison = gradeA - gradeB;
+        } else {
+            // Default alphabetical sorting for other fields
+            comparison = (a[sortKey] || '').localeCompare(b[sortKey] || '', undefined, { numeric: true });
+        }
+        
+        return sortOrder === 'asc' ? comparison : -comparison;
+    });
+
+    renderLessons(filteredLessons);
+    updateAllFacets();
+    updateResultsCount(filteredLessons.length);
 }
 
-// Render lessons to DOM
 function renderLessons(lessonsToRender) {
   const container = document.getElementById('hits')
   if (!container) return
@@ -106,23 +110,18 @@ function renderLessons(lessonsToRender) {
     return
   }
   
-  container.innerHTML = lessonsToRender.map(lesson => `
+  container.innerHTML = lessonsToRender.map(lesson => {
+    const highlightedTitle = highlightText(lesson.lessonTitle);
+    return `
     <li class="ais-Hits-item">
       <div class="hit">
         <div class="hit-content">
           <div class="hit-header">
-            <h2 class="hit-name">${highlightText(lesson.lessonTitle)}</h2>
-            <div class="hit-status">
-              ${lesson.readyToPublish 
-                ? '<span class="badge badge-success">✓ Ready</span>' 
-                : '<span class="badge badge-warning">In Progress</span>'}
-            </div>
+            <h2 class="hit-name">${highlightedTitle}</h2>
           </div>
-          
           <p class="hit-category-breadcrumb">
             Grade ${lesson.grade} • ${lesson.subject}
           </p>
-          
           <div class="hit-concepts">
             ${lesson.ctConcept.split(', ').map(concept => 
               `<span class="concept-tag">${concept}</span>`
@@ -133,125 +132,237 @@ function renderLessons(lessonsToRender) {
             By ${lesson.originalAuthor}
             ${lesson.revisedBy ? ` • Revised by ${lesson.revisedBy}` : ''}
           </p>
-          
           <div class="hit-footer">
             ${lesson.dateFinalized ? `<span class="hit-date">Finalized: ${lesson.dateFinalized}</span>` : ''}
           </div>
-          
           <div class="hit-actions">
-            ${lesson.linkToFolder ? `
-              <a href="${lesson.linkToFolder}" target="_blank" rel="noopener noreferrer" class="btn-primary">
+            <button onclick="handleLessonClick('${lesson.linkToFolder.replace(/'/g, "\\'")}')" class="btn-primary">
                 View Lesson →
-              </a>
-            ` : ''}
+            </button>
           </div>
         </div>
       </div>
     </li>
-  `).join('')
+  `}).join('')
 }
 
-// Highlight search terms
 function highlightText(text) {
-  const query = document.getElementById('search-input')?.value
+  const query = searchState.query;
   if (!query) return text
-  
-  const regex = new RegExp(`(${query})`, 'gi')
+
+  const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(`(${escapedQuery})`, 'gi')
   return text.replace(regex, '<mark>$1</mark>')
 }
 
-// Update facets with counts
-function updateFacets() {
-  updateFacet('grade-facet', getUniqueValues('grade'))
-  updateFacet('subject-facet', getUniqueValues('subject'))
-  updateFacet('concept-facet', getUniqueValues('ctConcept'))
+function updateAllFacets() {
+    const facets = ['grade', 'subject', 'ctConcept'];
+    facets.forEach(facetToUpdate => {
+        let tempFilteredLessons = [...allLessons];
+
+        // Filter by search query
+        if (searchState.query) {
+            tempFilteredLessons = tempFilteredLessons.filter(lesson =>
+                ['lessonTitle', 'originalAuthor', 'subject', 'ctConcept', 'grade'].some(field =>
+                    lesson[field]?.toLowerCase().includes(searchState.query.toLowerCase())
+                )
+            );
+        }
+
+        // Filter by OTHER active facets
+        facets.forEach(otherFacet => {
+            if (otherFacet !== facetToUpdate && searchState.filters[otherFacet].length > 0) {
+                tempFilteredLessons = tempFilteredLessons.filter(lesson =>
+                    searchState.filters[otherFacet].some(value => lesson[otherFacet]?.includes(value))
+                );
+            }
+        });
+
+        // Now, get the counts for the facet we are currently updating
+        const counts = getCountsForFacet(tempFilteredLessons, facetToUpdate);
+        const facetElementId = facetToUpdate === 'ctConcept' ? 'concept-facet' : `${facetToUpdate}-facet`;
+        renderFacet(facetElementId, counts, searchState.filters[facetToUpdate]);
+    });
 }
 
-function getUniqueValues(field) {
-  const counts = {}
-  lessons.forEach(lesson => {
-    const values = lesson[field].split(', ')
-    values.forEach(value => {
-      if (value) counts[value] = (counts[value] || 0) + 1
-    })
-  })
-  return Object.entries(counts).sort((a, b) => b[1] - a[1])
+
+function getCountsForFacet(lessonsToCount, field) {
+    const counts = new Map();
+    lessonsToCount.forEach(lesson => {
+        const values = lesson[field]?.split(',').map(v => v.trim()).filter(Boolean);
+        if (values) {
+            values.forEach(value => {
+                counts.set(value, (counts.get(value) || 0) + 1);
+            });
+        }
+    });
+    return counts;
 }
 
-function updateFacet(facetId, values) {
-  const container = document.getElementById(facetId)
-  if (!container) return
-  
-  container.innerHTML = values.slice(0, 10).map(([value, count]) => `
-    <li>
-      <label>
-        <input type="checkbox" value="${value}" class="facet-checkbox">
-        <span class="facet-value">${value}</span>
-        <span class="facet-count">${count}</span>
-      </label>
-    </li>
-  `).join('')
-  
-  // Attach event listeners to new checkboxes
-  container.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
-    checkbox.addEventListener('change', searchLessons)
-  })
+function renderFacet(elementId, counts, selectedValues) {
+    const container = document.getElementById(elementId);
+    if (!container) return;
+
+    // Sort values alphabetically for consistent display
+    const sortedValues = [...counts.keys()].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
+    if (sortedValues.length === 0) {
+        container.innerHTML = '<li>No options available</li>';
+        return;
+    }
+
+    container.innerHTML = sortedValues.map(value => {
+        const count = counts.get(value);
+        const isChecked = selectedValues.includes(value);
+        return `
+      <li>
+        <label>
+          <input type="checkbox" value="${value}" class="facet-checkbox" ${isChecked ? 'checked' : ''}>
+          <span class="facet-value">${value}</span>
+          <span class="facet-count">${count}</span>
+        </label>
+      </li>
+    `;
+    }).join('');
 }
 
 function updateResultsCount(count) {
-  const element = document.getElementById('results-count')
-  if (element) {
-    element.textContent = `${count} ${count === 1 ? 'result' : 'results'}`
-  }
+    const element = document.getElementById('results-count');
+    if (element) {
+        element.textContent = `${count} ${count === 1 ? 'result' : 'results'}`;
+    }
 }
 
-// Clear all filters
 function clearFilters() {
-  document.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false)
-  const searchInput = document.getElementById('search-input')
-  if (searchInput) searchInput.value = ''
-  searchLessons()
+    document.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.checked = false; });
+    const searchInput = document.getElementById('search-input');
+    if (searchInput) searchInput.value = '';
+
+    // Reset state and re-render
+    searchAndRender();
+}
+
+function updateStateFromDOM() {
+    const searchInput = document.getElementById('search-input');
+    searchState.query = searchInput ? searchInput.value : '';
+
+    searchState.filters.grade = Array.from(document.querySelectorAll('#grade-facet input:checked')).map(cb => cb.value);
+    searchState.filters.subject = Array.from(document.querySelectorAll('#subject-facet input:checked')).map(cb => cb.value);
+    searchState.filters.ctConcept = Array.from(document.querySelectorAll('#concept-facet input:checked')).map(cb => cb.value);
+
+    const sortSelect = document.getElementById('sort-select');
+    searchState.sortBy = sortSelect ? sortSelect.value : 'lessonTitle';
+
+    const sortOrderToggle = document.getElementById('sort-order-toggle');
+    searchState.sortOrder = sortOrderToggle ? sortOrderToggle.dataset.order : 'asc';
 }
 
 // Create debounced search function
-const debouncedSearch = debounce(searchLessons, 300)
+const debouncedSearchAndRender = debounce(searchAndRender, 300);
 
-// Initialize and attach event listeners when DOM is ready
 function initializeSearch() {
-  // Load lessons
-  loadLessons()
-  
-  // Attach event listeners
-  const searchInput = document.getElementById('search-input')
-  if (searchInput) {
-    searchInput.addEventListener('input', debouncedSearch)
-  }
-  
-  // Prevent form submission
-  const searchForm = document.querySelector('form[role="search"]')
-  if (searchForm) {
-    searchForm.addEventListener('submit', (e) => {
-      e.preventDefault()
-      searchLessons()
-    })
-  }
-  
-  // Sort select
-  const sortSelect = document.getElementById('sort-select')
-  if (sortSelect) {
-    sortSelect.addEventListener('change', searchLessons)
-  }
-  
-  // Clear filters button
-  const clearButton = document.getElementById('clear-filters-btn')
-  if (clearButton) {
-    clearButton.addEventListener('click', clearFilters)
-  }
+    // Load lesson data first
+    loadLessons();
+
+    // Search input
+    document.getElementById('search-input')?.addEventListener('input', debouncedSearchAndRender);
+
+    // Prevent form submission which reloads the page
+    document.querySelector('form[role="search"]')?.addEventListener('submit', (e) => e.preventDefault());
+
+    // Sort select dropdown
+    document.getElementById('sort-select')?.addEventListener('change', searchAndRender);
+
+    // Sort order toggle button
+    document.getElementById('sort-order-toggle')?.addEventListener('click', (e) => {
+        const button = e.currentTarget;
+        const newOrder = button.dataset.order === 'asc' ? 'desc' : 'asc';
+        button.dataset.order = newOrder;
+        button.textContent = newOrder === 'asc' ? 'Ascending' : 'Descending';
+        searchAndRender();
+    });
+
+    // Filter checkboxes (delegated to the parent column)
+    document.getElementById('left-column')?.addEventListener('change', (e) => {
+        if (e.target.matches('.facet-checkbox')) {
+            searchAndRender();
+        }
+    });
+
+    // Clear filters button
+    document.getElementById('clear-filters-btn')?.addEventListener('click', clearFilters);
 }
 
-// Initialize on DOM ready
+// Authentication handling
+async function checkAuthStatus() {
+    try {
+        const response = await fetch('/api/auth/check', {
+            credentials: 'include'
+        });
+        return response.ok;
+    } catch (error) {
+        console.error('Error checking auth status:', error);
+        return false;
+    }
+}
+
+function handleLessonClick(lessonUrl) {
+    // Check if user is authenticated
+    checkAuthStatus().then(isAuthenticated => {
+        if (isAuthenticated) {
+            // User is signed in, open the lesson
+            window.open(lessonUrl, '_blank', 'noopener,noreferrer');
+        } else {
+            // User is not signed in, redirect to sign-in page
+            // Store the intended URL to redirect after sign-in
+            localStorage.setItem('redirectAfterSignIn', lessonUrl);
+            window.location.href = '/sign-in';
+        }
+    });
+}
+
+function initializeAuthButtons() {
+    const authContainer = document.getElementById('auth-container');
+    if (authContainer) {
+        // Check if user is authenticated
+        checkAuthStatus().then(isAuthenticated => {
+            if (isAuthenticated) {
+                // Show sign out button
+                authContainer.innerHTML = `
+                    <button class="sign-in-btn" onclick="handleSignOut()">
+                        Sign Out
+                    </button>
+                `;
+            } else {
+                // Show single sign in button
+                authContainer.innerHTML = `
+                    <button class="sign-up-btn" onclick="handleSignIn()">
+                        Sign In
+                    </button>
+                `;
+            }
+        });
+    }
+}
+
+function handleSignIn() {
+    window.location.href = '/sign-in';
+}
+
+function handleSignOut() {
+    // Use Clerk's sign out endpoint
+    window.location.href = '/sign-in';  // Clerk will handle sign out through middleware
+}
+
+// --- SCRIPT EXECUTION ---
+
+// Wait for the DOM to be fully loaded before initializing.
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initializeSearch)
+    document.addEventListener('DOMContentLoaded', () => {
+        initializeSearch();
+        initializeAuthButtons();
+    });
 } else {
-  initializeSearch()
+    initializeSearch();
+    initializeAuthButtons();
 }

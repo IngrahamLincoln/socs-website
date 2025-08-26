@@ -10,12 +10,59 @@ export async function GET() {
   <title>SOCS4AI Lesson Search</title>
   <link rel="stylesheet" href="/search/style.css">
   <link rel="stylesheet" href="/search/custom-overrides.css">
+  <style>
+    .auth-buttons {
+      display: flex;
+      align-items: center;
+    }
+    .auth-buttons button {
+      padding: 10px 20px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      font-weight: 500;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+    .auth-buttons button:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+    }
+    .sign-in-btn {
+      background-color: white;
+      color: #333;
+      border: 1px solid #ddd;
+    }
+    .sign-in-btn:hover {
+      background-color: #f5f5f5;
+    }
+    .sign-up-btn {
+      background-color: #0070f3;
+      color: white;
+    }
+    .sign-up-btn:hover {
+      background-color: #0051cc;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 2rem;
+    }
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 2rem;
+      flex: 1;
+    }
+  </style>
 </head>
 <body>
   <div class="instant-search-container">
     <header>
-      <a href="/"><img src="/socs-wordmark.png.webp" alt="SOCS4AI" style="height: 50px;" /></a>
-      <div id="search-input-container">
+      <div class="header-left">
+        <a href="/"><img src="/socs-wordmark.png" alt="SOCS For All" style="height: 50px;" /></a>
+        <div id="search-input-container">
         <form action="" role="search">
           <input
             id="search-input"
@@ -29,6 +76,10 @@ export async function GET() {
             </svg>
           </button>
         </form>
+      </div>
+      </div>
+      <div class="auth-buttons" id="auth-container">
+        <!-- Auth buttons will be dynamically inserted here -->
       </div>
     </header>
 
@@ -58,12 +109,15 @@ export async function GET() {
       <div id="right-column">
         <div class="results-header">
           <span id="results-count"></span>
-          <select id="sort-select">
-            <option value="relevance">Most Relevant</option>
-            <option value="title">Title A-Z</option>
-            <option value="grade">Grade Level</option>
-            <option value="lesson-number">Lesson Number</option>
-          </select>
+          <div id="sort-by-wrapper">
+            <select id="sort-select">
+              <option value="lessonTitle">Title</option>
+              <option value="grade">Grade</option>
+              <option value="subject">Subject</option>
+              <option value="ctConcept">CT Concept</option>
+            </select>
+            <button id="sort-order-toggle" data-order="asc">Ascending</button>
+          </div>
         </div>
         
         <ul class="ais-Hits-list" id="hits"></ul>

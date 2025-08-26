@@ -36,12 +36,12 @@ export async function GET() {
       }
       values.push(current.trim())
       
-      // Map to lesson object
+      // Map to lesson object - use exact header names from CSV
       const lesson = {
-        id: values[headers.indexOf('Lesson ID (hard coded)')] || '',
+        id: values[0] || '', // First column (empty header)
         lessonNumber: values[headers.indexOf('Lesson # (1-6)')] || '',
         dateFinalized: values[headers.indexOf('Date Finalized')] || '',
-        revisedBy: values[headers.indexOf('Revised By')] || '',
+        revisedBy: values[headers.indexOf('Revised by')] || '', // lowercase 'by'
         readyToPublish: (values[headers.indexOf('Ready to publish to webpage')] || '').toUpperCase() === 'TRUE',
         linkToFolder: values[headers.indexOf('Link to folder with updated lesson plan and materials')] || '',
         notes: values[headers.indexOf('Notes')] || '',
