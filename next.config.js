@@ -15,9 +15,18 @@ const nextConfig = {
     return config;
   },
   
-  // Basic headers for caching
+  // Basic headers for caching and security
   async headers() {
     return [
+      {
+        source: '/(.*)',
+        headers: [
+          {
+            key: 'X-Frame-Options',
+            value: 'SAMEORIGIN',
+          },
+        ],
+      },
       {
         source: '/api/(.*)',
         headers: [
