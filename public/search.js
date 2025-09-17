@@ -203,8 +203,21 @@ function renderFacet(elementId, counts, selectedValues) {
     const container = document.getElementById(elementId);
     if (!container) return;
 
-    // Sort values alphabetically for consistent display
-    const sortedValues = [...counts.keys()].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    // Custom sorting for grade facet to ensure K comes first
+    let sortedValues;
+    if (elementId === 'grade-facet') {
+        const gradeOrder = { 'K': 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6 };
+        sortedValues = [...counts.keys()].sort((a, b) => {
+            const orderA = gradeOrder[a] !== undefined ? gradeOrder[a] : 999;
+            const orderB = gradeOrder[b] !== undefined ? gradeOrder[b] : 999;
+            if (orderA !== orderB) return orderA - orderB;
+            // Fallback to alphabetical for non-standard grades
+            return a.localeCompare(b, undefined, { numeric: true });
+        });
+    } else {
+        // Sort values alphabetically for other facets
+        sortedValues = [...counts.keys()].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    }
 
     if (sortedValues.length === 0) {
         container.innerHTML = '<li>No options available</li>';
@@ -293,82 +306,120 @@ function initializeSearch() {
     document.getElementById('clear-filters-btn')?.addEventListener('click', clearFilters);
 }
 
-// --- NEW CLERK.JS AUTHENTICATION LOGIC ---
+// --- NEW ANALYTICS & LESSON VIEW LOGIC ---
 
-let clerk = null; // This will hold the global Clerk instance
-
-/**
- * This function is called once the Clerk.js script is fully loaded.
- * It initializes the Clerk instance and sets up listeners to keep the UI in sync.
- */
-function startClerk() {
-  clerk = window.Clerk;
-  
-  // Add a listener to automatically update the UI whenever the user signs in or out
-  clerk.addListener(({ user }) => {
-    updateAuthUI(user);
-    checkRedirect(); // Check for a pending lesson redirect after auth state changes
-  });
-  
-  // Initial UI setup and redirect check
-  updateAuthUI(clerk.user);
-  checkRedirect();
-}
-
-/**
- * Dynamically updates the header buttons based on the user's authentication state.
- * @param {object | null} user - The Clerk user object, or null if signed out.
- */
-function updateAuthUI(user) {
-    const authContainer = document.getElementById('auth-container');
-    if (!authContainer) return;
-
-    if (user) {
-        // User is signed in: show a "Sign Out" button
-        authContainer.innerHTML = `
-            <button class="sign-in-btn" id="sign-out-btn">Sign Out</button>
-        `;
-        document.getElementById('sign-out-btn')?.addEventListener('click', () => {
-            clerk?.signOut({ redirectUrl: '/' });
-        });
-    } else {
-        // User is signed out: show a "Sign In / Sign Up" button
-        authContainer.innerHTML = `
-            <button class="sign-up-btn" id="sign-in-btn">Sign In / Sign Up</button>
-        `;
-        document.getElementById('sign-in-btn')?.addEventListener('click', () => {
-            clerk?.openSignIn();
-        });
-    }
-}
+let lessonUrlToOpen = null;
 
 /**
  * Handles clicking on a "View Lesson" button.
- * If the user is signed in, it opens the lesson. If not, it opens the sign-in modal
- * and saves the lesson URL to be opened after a successful login.
- * @param {string} lessonUrl - The URL of the lesson to view.
+ * Stores the lesson URL and displays the analytics modal.
  */
 function handleLessonClick(lessonUrl) {
-  if (clerk && clerk.user) {
-    // User is signed in, open the lesson directly
-    window.open(lessonUrl, '_blank', 'noopener,noreferrer');
-  } else {
-    // User is not signed in. Store the target URL and open the sign-in modal.
-    localStorage.setItem('redirectAfterSignIn', lessonUrl);
-    clerk?.openSignIn();
+  lessonUrlToOpen = lessonUrl;
+  document.getElementById('analytics-modal').style.display = 'flex';
+}
+
+// Expose handleLessonClick to the global scope so inline `onclick` attributes can find it
+window.handleLessonClick = handleLessonClick;
+
+/**
+ * Hides the modal and opens the stored lesson link in a new tab.
+ */
+function proceedToLesson() {
+  document.getElementById('analytics-modal').style.display = 'none';
+  document.getElementById('analytics-form').reset();
+  document.getElementById('grade-level-group').style.display = 'none';
+
+  if (lessonUrlToOpen) {
+    window.open(lessonUrlToOpen, '_blank', 'noopener,noreferrer');
+    lessonUrlToOpen = null; // Clear after use
   }
 }
 
 /**
- * Checks if there is a pending lesson redirect in localStorage after a user signs in.
- * If found, it opens the lesson and clears the stored URL.
+ * Generates or retrieves a unique anonymous ID for the user.
  */
-function checkRedirect() {
-    const redirectUrl = localStorage.getItem('redirectAfterSignIn');
-    if (redirectUrl && clerk && clerk.user) {
-        localStorage.removeItem('redirectAfterSignIn');
-        window.open(redirectUrl, '_blank', 'noopener,noreferrer');
+function getAnonymousId() {
+  let anonId = localStorage.getItem('socs-anonymous-id');
+  if (!anonId) {
+    anonId = crypto.randomUUID();
+    localStorage.setItem('socs-anonymous-id', anonId);
+  }
+  return anonId;
+}
+
+/**
+ * Sets up event listeners for the analytics modal.
+ */
+function initializeAnalyticsModal() {
+  const form = document.getElementById('analytics-form');
+  const skipButton = document.getElementById('skip-button');
+  const teacherRadios = document.querySelectorAll('input[name="isTeacher"]');
+
+  // Handle form submission
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const formData = new FormData(form);
+    const isTeacher = formData.get('isTeacher') === 'true';
+    const gradeLevel = formData.get('gradeLevel') || null;
+
+    // Validate that if teacher is selected, grade level is provided
+    if (isTeacher && !gradeLevel) {
+      alert('Please select a grade level.');
+      return;
     }
+
+    const payload = {
+      userId: getAnonymousId(),
+      isTeacher,
+      gradeLevel,
+      school: null // School is not asked in this version
+    };
+
+    console.log('Submitting payload:', payload);
+
+    try {
+      const response = await fetch('/api/track/onboarding', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      console.log('Analytics submitted successfully');
+    } catch (error) {
+      console.error("Failed to submit analytics:", error);
+      // We still proceed to the lesson even if the analytics call fails
+    } finally {
+      proceedToLesson();
+    }
+  });
+
+  // Handle the skip button
+  skipButton.addEventListener('click', () => {
+    proceedToLesson();
+  });
+
+  // Show/hide grade level question based on teacher status
+  teacherRadios.forEach(radio => {
+    radio.addEventListener('change', (e) => {
+      const isTeacher = e.target.value === 'true';
+      const gradeGroup = document.getElementById('grade-level-group');
+      const gradeSelect = document.getElementById('gradeLevel');
+
+      if (isTeacher) {
+        gradeGroup.style.display = 'block';
+        gradeSelect.required = true;
+      } else {
+        gradeGroup.style.display = 'none';
+        gradeSelect.required = false;
+      }
+    });
+  });
 }
 
 // --- SCRIPT EXECUTION ---
@@ -377,47 +428,9 @@ function checkRedirect() {
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
         initializeSearch();
-        initializeClerk();
+        initializeAnalyticsModal();
     });
 } else {
     initializeSearch();
-    initializeClerk();
-}
-
-function initializeClerk() {
-    // Try to initialize Clerk if it's available
-    if (window.Clerk) {
-        window.Clerk.load().then(startClerk).catch((error) => {
-            console.error('Failed to load Clerk:', error);
-            // Fallback to basic auth buttons
-            showFallbackAuth();
-        });
-    } else {
-        // Wait for Clerk to be available
-        let attempts = 0;
-        const checkClerk = setInterval(() => {
-            attempts++;
-            if (window.Clerk) {
-                clearInterval(checkClerk);
-                window.Clerk.load().then(startClerk).catch((error) => {
-                    console.error('Failed to load Clerk:', error);
-                    showFallbackAuth();
-                });
-            } else if (attempts > 20) {
-                // After 10 seconds, show fallback
-                clearInterval(checkClerk);
-                console.warn('Clerk not available, using fallback');
-                showFallbackAuth();
-            }
-        }, 500);
-    }
-}
-
-function showFallbackAuth() {
-    const authContainer = document.getElementById('auth-container');
-    if (!authContainer) return;
-    
-    authContainer.innerHTML = `
-        <button class="sign-up-btn" onclick="window.location.href='/sign-in'">Sign In</button>
-    `;
+    initializeAnalyticsModal();
 }

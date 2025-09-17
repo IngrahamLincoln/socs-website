@@ -5,12 +5,33 @@ import { useUser } from '@clerk/nextjs'
 import { useRouter } from 'next/navigation'
 
 export default function OnboardingPage() {
-  const { user } = useUser()
+  const { user, isLoaded } = useUser()
   const router = useRouter()
   const [isTeacher, setIsTeacher] = useState<boolean | null>(null)
   const [gradeLevel, setGradeLevel] = useState('')
   const [school, setSchool] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Redirect users who have already completed onboarding
+  if (isLoaded && user && user.unsafeMetadata?.onboardingCompleted) {
+    router.push('/')
+    return null
+  }
+
+  // Don't render until Clerk is loaded
+  if (!isLoaded) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center">
+        <p>Loading...</p>
+      </div>
+    )
+  }
+
+  // If no user, redirect to sign up
+  if (!user) {
+    router.push('/sign-up')
+    return null
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
