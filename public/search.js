@@ -136,7 +136,7 @@ function renderLessons(lessonsToRender) {
             ${lesson.dateFinalized ? `<span class="hit-date">Finalized: ${lesson.dateFinalized}</span>` : ''}
           </div>
           <div class="hit-actions">
-            <button onclick="handleLessonClick('${lesson.linkToFolder.replace(/'/g, "\\'")}')" class="btn-primary">
+            <button onclick="handleLessonClick('${lesson.linkToFolder.replace(/'/g, "\\'")}', &quot;${lesson.lessonTitle.replace(/"/g, "&quot;")}&quot;)" class="btn-primary">
                 View Lesson →
             </button>
           </div>
@@ -309,13 +309,15 @@ function initializeSearch() {
 // --- NEW ANALYTICS & LESSON VIEW LOGIC ---
 
 let lessonUrlToOpen = null;
+let lessonTitleToTrack = null;
 
 /**
  * Handles clicking on a "View Lesson" button.
- * Stores the lesson URL and displays the analytics modal.
+ * Stores the lesson URL and title, then displays the analytics modal.
  */
-function handleLessonClick(lessonUrl) {
+function handleLessonClick(lessonUrl, lessonTitle) {
   lessonUrlToOpen = lessonUrl;
+  lessonTitleToTrack = lessonTitle;
   document.getElementById('analytics-modal').style.display = 'flex';
 }
 
@@ -333,6 +335,7 @@ function proceedToLesson() {
   if (lessonUrlToOpen) {
     window.open(lessonUrlToOpen, '_blank', 'noopener,noreferrer');
     lessonUrlToOpen = null; // Clear after use
+    lessonTitleToTrack = null; // Clear after use
   }
 }
 
@@ -363,6 +366,7 @@ function initializeAnalyticsModal() {
     const formData = new FormData(form);
     const isTeacher = formData.get('isTeacher') === 'true';
     const gradeLevel = formData.get('gradeLevel') || null;
+    const schoolDistrict = formData.get('schoolDistrict') || null;
 
     // Validate that if teacher is selected, grade level is provided
     if (isTeacher && !gradeLevel) {
@@ -371,16 +375,18 @@ function initializeAnalyticsModal() {
     }
 
     const payload = {
-      userId: getAnonymousId(),
+      lessonUrl: lessonUrlToOpen,
+      lessonTitle: lessonTitleToTrack || 'Unknown Lesson',
       isTeacher,
       gradeLevel,
-      school: null // School is not asked in this version
+      schoolDistrict,
+      interactionType: 'submitted'
     };
 
     console.log('Submitting payload:', payload);
 
     try {
-      const response = await fetch('/api/track/onboarding', {
+      const response = await fetch('/api/track/lesson-interaction', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -400,22 +406,43 @@ function initializeAnalyticsModal() {
   });
 
   // Handle the skip button
-  skipButton.addEventListener('click', () => {
+  skipButton.addEventListener('click', async () => {
+    // Track the skip interaction
+    const payload = {
+      lessonUrl: lessonUrlToOpen,
+      lessonTitle: lessonTitleToTrack || 'Unknown Lesson',
+      interactionType: 'skipped'
+    };
+
+    try {
+      await fetch('/api/track/lesson-interaction', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      console.log('Skip interaction tracked');
+    } catch (error) {
+      console.error("Failed to track skip:", error);
+    }
+
     proceedToLesson();
   });
 
-  // Show/hide grade level question based on teacher status
+  // Show/hide teacher fields based on teacher status
   teacherRadios.forEach(radio => {
     radio.addEventListener('change', (e) => {
       const isTeacher = e.target.value === 'true';
       const gradeGroup = document.getElementById('grade-level-group');
+      const teacherInfoGroup = document.getElementById('teacher-info-group');
       const gradeSelect = document.getElementById('gradeLevel');
 
       if (isTeacher) {
         gradeGroup.style.display = 'block';
+        teacherInfoGroup.style.display = 'block';
         gradeSelect.required = true;
       } else {
         gradeGroup.style.display = 'none';
+        teacherInfoGroup.style.display = 'none';
         gradeSelect.required = false;
       }
     });

@@ -1,20 +1,18 @@
 import { pgTable, text, timestamp, boolean, uuid } from 'drizzle-orm/pg-core';
 
-export const userProfiles = pgTable('user_profiles', {
+export const lesson = pgTable('lessons', {
   id: uuid('id').defaultRandom().primaryKey(),
-  userId: text('user_id').notNull().unique(),
-  isTeacher: boolean('is_teacher'),
-  gradeLevel: text('grade_level'),
-  school: text('school'),
-  onboardingCompleted: boolean('onboarding_completed').default(false),
+  lessonUrl: text('lesson_url').notNull(),
+  lessonTitle: text('lesson_title'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
-export const trackingEvents = pgTable('tracking_events', {
+export const teacher = pgTable('teachers', {
   id: uuid('id').defaultRandom().primaryKey(),
-  userId: text('user_id'),
-  eventType: text('event_type').notNull(),
-  eventData: text('event_data'),
+  lessonId: uuid('lesson_id').references(() => lesson.id),
+  isTeacher: boolean('is_teacher'),
+  gradeLevel: text('grade_level'),// i.e., 'K', '3'
+  schoolDistrict: text('school_district'), // Added school district field
+  interactionType: text('interaction_type').notNull(), // e.g., 'skip', 'submitted'
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });

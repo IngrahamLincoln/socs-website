@@ -147,10 +147,18 @@ export async function GET() {
             <label for="gradeLevel">What grade do you teach?</label>
             <select id="gradeLevel" name="gradeLevel">
               <option value="">Select a grade</option>
-              <option value="K-2">K-2</option>
-              <option value="3-5">3-5</option>
+              <option value="K">Kindergarten</option>
+              <option value="1">1st Grade</option>
+              <option value="2">2nd Grade</option>
+              <option value="3">3rd Grade</option>
+              <option value="4">4th Grade</option>
+              <option value="5">5th Grade</option>
               <option value="Other">Other</option>
             </select>
+          </div>
+          <div class="form-group" id="teacher-info-group" style="display: none;">
+            <label for="schoolDistrict">School District (Optional)</label>
+            <input type="text" id="schoolDistrict" name="schoolDistrict" placeholder="Enter your school district" style="width: 100%; padding: 0.75rem; border: 1px solid #ccc; border-radius: 4px; margin-bottom: 1rem;">
           </div>
           <div class="modal-buttons">
             <button type="button" id="skip-button" class="btn-skip">Continue to Lesson</button>
