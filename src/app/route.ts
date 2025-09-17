@@ -10,51 +10,7 @@ export async function GET() {
   <title>SOCS4AI Lesson Search</title>
   <link rel="stylesheet" href="/search/style.css">
   <link rel="stylesheet" href="/search/custom-overrides.css">
-  <script 
-    async
-    crossorigin="anonymous" 
-    data-clerk-publishable-key="${process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}"
-    onload="window.clerkAsyncInit()" 
-    src="https://excited-bedbug-92.clerk.accounts.dev/npm/@clerk/clerk-js@latest/dist/clerk.browser.js">
-  </script>
-  <script>
-    window.clerkAsyncInit = async () => {
-      await window.Clerk.load();
-    };
-  </script>
   <style>
-    .auth-buttons {
-      display: flex;
-      align-items: center;
-    }
-    .auth-buttons button {
-      padding: 10px 20px;
-      border-radius: 6px;
-      border: none;
-      cursor: pointer;
-      font-weight: 500;
-      font-size: 14px;
-      transition: all 0.2s;
-    }
-    .auth-buttons button:hover {
-      opacity: 0.9;
-      transform: translateY(-1px);
-    }
-    .sign-in-btn {
-      background-color: white;
-      color: #333;
-      border: 1px solid #ddd;
-    }
-    .sign-in-btn:hover {
-      background-color: #f5f5f5;
-    }
-    .sign-up-btn {
-      background-color: #0070f3;
-      color: white;
-    }
-    .sign-up-btn:hover {
-      background-color: #0051cc;
-    }
     header {
       display: flex;
       justify-content: space-between;
@@ -66,6 +22,88 @@ export async function GET() {
       align-items: center;
       gap: 2rem;
       flex: 1;
+    }
+    /* Analytics Modal Styles */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.6);
+      display: none; /* Hidden by default */
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+    .modal-content {
+      background-color: white;
+      padding: 2rem;
+      border-radius: 8px;
+      width: 90%;
+      max-width: 480px;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    }
+    .modal-content h2 {
+      margin-top: 0;
+      font-size: 1.5rem;
+      font-weight: 600;
+    }
+    .modal-content p {
+      margin-bottom: 1.5rem;
+      color: #555;
+    }
+    .modal-content .form-group {
+      margin-bottom: 1.5rem;
+    }
+    .modal-content label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-weight: 500;
+    }
+    .modal-content select {
+      width: 100%;
+      padding: 0.75rem;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      background-color: #f8f8f8;
+    }
+    .modal-content #teacher-radios {
+      display: flex;
+      gap: 1rem;
+    }
+    .modal-content #teacher-radios label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .modal-buttons {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.75rem;
+      margin-top: 2rem;
+    }
+    .modal-buttons button {
+        padding: 0.75rem 1.25rem;
+        border: none;
+        border-radius: 6px;
+        font-size: 1rem;
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+    .btn-submit {
+        background-color: #0070f3;
+        color: white;
+    }
+    .btn-submit:hover {
+        background-color: #0051cc;
+    }
+    .btn-skip {
+        background-color: #e0e0e0;
+        color: #333;
+    }
+    .btn-skip:hover {
+        background-color: #c7c7c7;
     }
   </style>
 </head>
@@ -90,10 +128,37 @@ export async function GET() {
         </form>
       </div>
       </div>
-      <div class="auth-buttons" id="auth-container">
-        <!-- Auth buttons will be dynamically inserted here -->
-      </div>
     </header>
+
+    <!-- Analytics Pop-up Modal -->
+    <div id="analytics-modal" class="modal-overlay">
+      <div class="modal-content">
+        <h2>A quick question...</h2>
+        <p>To help us improve our resources, please answer the following optional questions.</p>
+        <form id="analytics-form">
+          <div class="form-group">
+            <label>Are you a teacher?</label>
+            <div id="teacher-radios">
+              <label><input type="radio" name="isTeacher" value="true" required> Yes</label>
+              <label><input type="radio" name="isTeacher" value="false"> No</label>
+            </div>
+          </div>
+          <div class="form-group" id="grade-level-group" style="display: none;">
+            <label for="gradeLevel">What grade do you teach?</label>
+            <select id="gradeLevel" name="gradeLevel">
+              <option value="">Select a grade</option>
+              <option value="K-2">K-2</option>
+              <option value="3-5">3-5</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div class="modal-buttons">
+            <button type="button" id="skip-button" class="btn-skip">Continue to Lesson</button>
+            <button type="submit" class="btn-submit">Submit & Continue</button>
+          </div>
+        </form>
+      </div>
+    </div>
 
     <main>
       <div id="left-column">

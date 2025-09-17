@@ -1,33 +1,10 @@
-import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
+import { NextResponse } from 'next/server'
 
-// Define public routes that don't require authentication
-const isPublicRoute = createRouteMatcher([
-  '/',
-  '/landing',
-  '/about',
-  '/sign-in(.*)',
-  '/sign-up(.*)',
-  '/api/lessons', // Allow fetching lesson list without auth
-])
-
-// Define routes that should be protected
-const isProtectedRoute = createRouteMatcher([
-  '/lesson/(.*)', // Individual lesson pages
-  '/api/track(.*)', // Metrics tracking endpoints
-  '/dashboard(.*)', // Analytics dashboard
-])
-
-export default clerkMiddleware(async (auth, req) => {
-  // Allow public routes
-  if (isPublicRoute(req)) {
-    return
-  }
-
-  // Protect specific routes
-  if (isProtectedRoute(req)) {
-    await auth.protect()
-  }
-})
+export function middleware() {
+  // For now, just allow all requests through
+  // This removes the Clerk dependency that was causing issues
+  return NextResponse.next()
+}
 
 export const config = {
   matcher: [
